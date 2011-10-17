@@ -1,0 +1,21 @@
+mod_cron is a task scheduler for zotonic framework.
+
+mod_cron can launch any M:F(A) in very flexible time cycles.
+
+
+== Quickstart ==
+
+1. zotonic installmodule mod_cron
+2. Go to /admin/modules
+3. Activate cron
+4. Press F5. "Cron" button on left bar should appear.
+5. Click on it (or go to /admin/cron)
+6. This is mod_cron entry point. Click on "add job" button.
+7. In dialog appeared, you need to fill name of job, describe time intervals and
+   M:F(A) to run.
+
+
+== Known bugs ==
+
+1. Task will not stop on delete, if erlang < R14B03. Update your erlang version.
+

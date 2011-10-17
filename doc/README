@@ -1,2 +1,0 @@
-mod_cron is a task scheduler for zotonic.
-mod_cron can launch any M:F(A) in time cycle.
