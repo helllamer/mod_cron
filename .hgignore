@@ -1,0 +1,9 @@
+syntax: glob
+
+*.swp
+erl_crash.dump
+*.beam
+*.orig
+*.rej
+deps/*
+wiki/*
