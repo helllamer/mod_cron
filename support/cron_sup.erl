@@ -20,7 +20,7 @@
 
 %% Internal API
 -export([
-	start_link/1,
+	start_link/2,
 	stop_all_jobs/1,
 	start_job/2,
 	stop_job/2,
@@ -33,9 +33,8 @@
 -include("../include/cron.hrl").
 
 %% @doc to start two mod_cron supervisors.
-start_link(Context) ->
-    Sup = cron_lib:name_sup(Context),
-    supervisor:start_link({local, Sup}, ?MODULE, [sup, Context]).
+start_link({Sup, _JobSup, _JobSrv} = Names, Context) ->
+    supervisor:start_link({local, Sup}, ?MODULE, [sup, Names, Context]).
 
 
 %% @doc Stop all running jobs. Forced restarting of level-2 supervisor causes all jobs to terminate.
@@ -45,14 +44,12 @@ stop_all_jobs(Context) ->
 
 
 %% @doc launch a new job
-start_job(Task, Context) ->
-    JobSup = cron_lib:name_job_sup(Context),
-    supervisor:start_child(JobSup, [Task]).
+start_job(Args, JobSup) ->
+    supervisor:start_child(JobSup, [Args]).
 
 
 %% @doc stop the job by pid.
-stop_job(Pid, Context) when is_pid(Pid) ->
-    JobSup = cron_lib:name_job_sup(Context),
+stop_job(Pid, JobSup) when is_pid(Pid) ->
     supervisor:terminate_child(JobSup, Pid).
 
 
@@ -64,26 +61,25 @@ job_pids(Context) ->
 
 
 %% @doc level-1 supervisor: used to manage simple-one-for-one level-2 supervisor
-init([sup, Context]) ->
-    JobSup = cron_lib:name_job_sup(Context),
+init([sup, {_, JobSup, JobSrv} = Names, Context]) ->
     {ok,
 	%% rest_for_one strategy is used to synchronize job_srv and level-2 supervisor child-list.
 	{_SupFlags = {rest_for_one, ?CRON_MAX_RESTART, ?CRON_MAX_TIME},
 	    [
 		%% job monitoring server
-		{   cron_job_srv,
-		    {cron_job_srv, start_link, [Context]},
+		{   JobSrv,
+		    {cron_job_srv, start_link, [Names, Context]},
 		    permanent,
-		    brutal_kill,
+		    2000,
 		    worker,
 		    [cron_job_srv]
 		},
 
-		%% simple-one-for-one supervisor is used for direct job-processes management
+		%% simple-one-for-one supervisor is used for simple job-processes management
 		{   JobSup,									%% ChildId
 		    {supervisor, start_link, [{local, JobSup}, ?MODULE, job_sup]},		%% StartFun = {M, F, A}
 		    permanent,									%% Restart  = permanent | transient | temporary
-		    2000,									%% Shutdown = brutal_kill | int() >= 0 | infinity
+		    infinity,									%% Shutdown = brutal_kill | int() >= 0 | infinity
 		    supervisor,									%% Type     = worker | supervisor
 		    [?MODULE]									%% Modules  = [Module] | dynamic
 		}
@@ -93,11 +89,12 @@ init([sup, Context]) ->
 
 %% @doc level-2 supervisor. Simple-1-for-1 sup. is able to dynamically start job-processes as childs with any args passed from start_child/2.
 init(job_sup) ->
+    io:format("1", []),
     {ok,
 	{_SupFlags = {simple_one_for_one, ?CRON_MAX_RESTART, ?CRON_MAX_TIME},
 	    [
 		{   undefined,
-		    {cron, start_link, []},	%% No args here. Only arg will be in start_job/1.
+		    {cron_task, start_link, []},	%% No args here. Only arg will be in start_job/1.
 		    permanent,
 		    brutal_kill,
 		    worker,

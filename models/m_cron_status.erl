@@ -42,9 +42,14 @@ m_value(_M, _Context) ->
 
 %% Pre-render list of cron_job_srv
 format_served(Context) ->
-    {ok, Jobs} = cron_job_srv:list(Context),
-    F = fun(#job{id=Id, pid=Pid, task=Task, created=Created}) ->
-	    {Id, str(Task), str(Pid), Created}
+    {ok, Jobs} = cron_job_srv:jobs(Context),
+    F = fun(#job{id=Id, pid=Pid, task={When, {M,F,A}}, created=Created, nextrun_ts=NextrunTs}) ->
+	    [{id,	Id},
+	     {'when',	str(When)},
+	     {mfa,	str_mfa(M,F,A)},
+	     {pid,	str(Pid)},
+	     {created,	Created},
+	     {nextrun,	z_datetime:timestamp_to_datetime(NextrunTs)} ]
     end,
     lists:map(F, Jobs).
 
@@ -57,3 +62,10 @@ format_running(Context) ->
 
 str(Term) ->
     io_lib:format("~p", [Term]).
+
+
+str_mfa(M,F,A) ->
+    [ $[ | Args0] = lists:flatten(io_lib:format("~p", [A])),
+    Args1 = lists:sublist(Args0, length(Args0) - 1),
+    io_lib:format("~p:~p(" ++ Args1 ++ ").", [M,F]).
+

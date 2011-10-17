@@ -21,52 +21,56 @@
 -behaviour(gen_server).
 
 %% Internal API exports
--export([start_link/1, add_job/3, delete_job/2, update_job_info/3, list/1]).
+-export([start_link/2, add_job/3, delete_job/2, update_job_info/3, jobs/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% Server state
 -record(state, {
-	context,	%% zotonic context
 	jobs,		%% KV-storage. K = job_id, V = #job{}
-	run,		%% Running now job MFAs. Usually, this list looks empty. [{pid, job_id}]
-	name		%% Registered module name
+	mfa_pids,	%% Running now job MFAs. Usually, this list looks empty. [{pid, job_id}]
+	sup,		%% Cron host level-1 supervisor
+	job_sup,	%% Cron job supervisor
+	job_srv,	%% Registered job server name
+	context		%% zotonic context (needed for z_notifier)
     }).
 
 -include("../include/cron.hrl").
+-include("zotonic.hrl").
 
 
 %%%%%%%%%%%%%%%%%%%%
 %%% Internal API %%%
 
 %% @doc Start job manager
-start_link(Context) ->
-    process_flag(trap_exit, true),
-    SrvName = name(Context),
-    gen_server:start_link({local, SrvName}, ?MODULE, [SrvName, Context], []).
+start_link({_, _, JobSrv} = Names, Context) ->
+    gen_server:start_link({local, JobSrv}, ?MODULE, [Names, Context], []).
 
 
-add_job(JobId, Task, Context) ->
-    call_ctx({add_job, JobId, Task}, Context).
+add_job(JobId, Task, JobSrv) ->
+    gen_server:call(JobSrv, {add_job, JobId, Task}).
 
-delete_job(JobId, Context) ->
-    call_ctx({delete, JobId}, Context).
+delete_job(JobId, JobSrv) ->
+    gen_server:call(JobSrv, {delete_job, JobId}).
 
 update_job_info(JobId, Info, Srv) ->
     gen_server:cast(Srv, {update_job_info, JobId, Info}).
 
-list(Context) ->
-    call_ctx(list, Context).
+jobs(Context) ->
+    call_ctx(jobs, Context).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% gen_server callbacks %%%
 
-init([SrvName, Context]) ->
+init([{Sup, JobSup, JobSrv} = _Names, Context]) ->
+    process_flag(trap_exit, true),
     State = #state{
-	name	= SrvName,
 	context = Context,
+	job_srv	= JobSrv,
+	sup	= Sup,
+	job_sup	= JobSup,
 	jobs	= orddict:new(),
 	mfa_pids= orddict:new()
     },
@@ -74,13 +78,14 @@ init([SrvName, Context]) ->
 
 
 %% run a new job, if not already running
-handle_call({add_job, JobId, Task}, _From, #state{context=Context, jobs=Jobs0} = State) ->
+handle_call({add_job, JobId, Task}, _From, #state{job_sup=JobSup, job_srv=JobSrv, jobs=Jobs0} = State) ->
     ResultState = case lookup_job(JobId, Jobs0) of
 	
 	%% No job with such id is started. Start new job.
 	undefined ->
-	    {ok, JobPid} = start_job(JobId, Task, Context),
-	    Jobs1 = add_job1(JobId, Task, Pid, Jobs0),
+	    {ok, JobPid} = cron_sup:start_job([JobId, Task, JobSrv], JobSup),
+	    Job	  = cron_job:new(JobId, Task, JobPid),
+	    Jobs1 = orddict:store(JobId, Job, Jobs0),
 	    State#state{jobs=Jobs1};
 
 	%% Same task is already here - ignore
@@ -89,25 +94,29 @@ handle_call({add_job, JobId, Task}, _From, #state{context=Context, jobs=Jobs0} =
 
 	%% Task definition is changed for existing job. Stop old job and start new.
 	{ok, Job} ->
-	    stop_job(Job, Context),
-	    {ok, JobPid} = start_job(JobId, Task, Context),
-	    Job1  = Job#job{pid=JobPid, task=Task},
-	    Jobs1 = add_job1(JobId, Job1, Jobs0),
+	    stop_job1(Job, JobSup),
+	    {ok, JobPid} = cron_sup:start_job([JobId, Task, JobSrv], JobSup),
+	    Job1  = cron_job:set_job_pid(JobPid,
+			cron_job:set_task(Task, Job)
+		    ),
+	    Jobs1 = orddict:store(JobId, Job1, Jobs0),
 	    State#state{jobs=Jobs1}
 
     end,
+    ?DEBUG(JobPid),
     {reply, {ok, JobPid}, ResultState};
 
 %% Return current job list
-handle_call(list, _From, #state{jobs=Jobs} = State) ->
-    {reply, {ok, Jobs}, State};
+handle_call(jobs, _From, #state{jobs=Jobs} = State) ->
+    Result = orddict:fold(fun(_, Job, Acc0) -> [Job | Acc0] end, [], Jobs),
+    {reply, {ok, Result}, State};
 
 %% stop job and delete it from the job list
-handle_call({delete_job, JobId}, _From, #state{jobs=Jobs0, context=Context} = State) ->
+handle_call({delete_job, JobId}, _From, #state{jobs=Jobs0, job_sup=JobSup} = State) ->
     {Reply, State2} = case lookup_job(JobId, Jobs0) of
 	{ok, Job} ->
-	    stop_job(Job, Context),
-	    Jobs1 = delete_job1(JobId, Jobs0),
+	    stop_job1(Job, JobSup),
+	    Jobs1 = orddict:erase(JobId, Jobs0),
 	    {ok, State#state{jobs=Jobs1}};
 
 	_-> {undefined, State}
@@ -119,24 +128,37 @@ handle_call(Request, _From, State) ->
 
 
 %% Job process reporting about time of next run (seconds after now).
-handle_cast({job_next_run_in, JobId, Seconds}, #state{jobs=Jobs0} = State) ->
-    UpdateF = fun(Job) -> #job{next_run_ts=current_timestamp()+Seconds} end,
+handle_cast({job_nextrun_in_seconds, JobId, Seconds}, #state{jobs=Jobs0, context=Context} = State) ->
+    UpdateF = fun(Job) -> 
+	    NextRunTimestamp = current_timestamp() + Seconds,
+	    z_notifier:notify({cron_job_nextrun, JobId, NextRunTimestamp}, Context),
+	    cron_job:set_nextrun(NextRunTimestamp, Job)
+    end,
     Jobs1 = orddict:update(JobId, UpdateF, Jobs0),
     {noreply, State#state{jobs=Jobs1}};
+
 %% Some running job is being executed. Add pid+job_id into mfa_pids list.
-handle_cast({job_running, JobId, MfaPid}, #state{mfa_pids=MfaPids0} = State) ->
+handle_cast({job_running, JobId, MfaPid}, #state{mfa_pids=MfaPids0, context=Context} = State) ->
+    link(MfaPid),
     MfaPids1 = orddict:store(MfaPid, JobId, MfaPids0),
+    z_notifier:notify({cron_job_executed, JobId}, Context),
     {noreply, State#state{mfa_pids=MfaPids1}};
 
 handle_cast(_Request, State) ->
     {noreply, State}.
 
 
+%% Supervisor wants to stop me.
+handle_info({'EXIT', _From, shutdown}, State) ->
+    {stop, normal, State};
+
 %% Linked job mfa is finished: remove it from mfa_pids.
 handle_info({'EXIT', MfaPid, _Reason}, #state{mfa_pids=MfaPids0} = State) ->
     MfaPids1 = orddict:erase(MfaPid, MfaPids0),
     {noreply, State#state{mfa_pids=MfaPids1}};
-handle_info(_Info, State) ->
+
+handle_info(Info, State) ->
+    ?LOG("~p:~p unknown info: ~p", [?MODULE, ?LINE, Info]),
     {noreply, State}.
 
 
@@ -163,25 +185,11 @@ lookup_job(JobId, Jobs) ->
 	_	      -> undefined
     end.
 
+
 %% Stop the job and return a new job list.
-stop_job(#job{pid=Pid} = Job, Context) ->
-    cron_sup:stop_job(Pid, Context).
-
-delete_job1(JobId, Jobs) ->
-    orddict:erase(JobId, Jobs).
-
-%% Start a new job and add it to list -> {ok, Pid, Jobs2}.
-start_job(JobId, Task, Context) ->
-    {ok, Pid} = cron_sup:start_job(Task, Context),
-    {ok, Pid}.
-
-
-add_job1(JobId, Task, Pid, Jobs) ->
-    Job = #job{task=Task, pid=Pid},
-    add_job1(JobId, Job, Jobs).
-
-add_job1(JobId, Job, Jobs) ->
-    orddict:store(JobId, Job, Jobs).
+stop_job1(Job, JobSup) ->
+    Pid = cron_job:get_job_pid(Job),
+    cron_sup:stop_job(Pid, JobSup).
 
 
 %% gen_server:call wrapper for dynamically named server
@@ -189,41 +197,6 @@ call_ctx(Message, Context) ->
     gen_server:call(name(Context), Message).
 
 
-%% update job in the job list
-update_job(JobId, Info, Jobs) ->
-    UpdateF = fun(Job) -> update_job1(Info, Job) end,
-    orddict:update(JobId, UpdateF, Jobs).
-
-
-%% update job information (~patch #job{} record)
-update_job1([{cycle, LastPid}|T], #job{counter=Counter} = Job) ->
-    Job1 = Job#job{
-	counter  = Counter+1,
-	last_pid = LastPid,
-	status   = ?CRON_JOB_STATUS_RUNNING
-    },
-    %% attach to new job subproccess (maybe, already finished process)
-    erlang:link(LastPid),
-    update_job1(T, Job1);
-update_job1([{next_run_in_seconds, Seconds}|T], Job) ->
-    NextRunTimestamp = current_timestamp() + Seconds,
-    update_job1(T, Job#job{next_run_ts=NextRunTimestamp});
-update_job1([{task, Task}|T], Job) ->
-    update_job1(T, Job#job{task=Task});
-update_job1([{pid, Pid}|T], Job) ->
-    update_job1(T, Job#job{pid=Pid});
-update_job1([], Job) ->
-    Job.
-
-
-%% Find job using last_pid and set status to Status
-set_status_lastpid(LastPid, Status, [#job{last_pid=LastPid}=Job|T]) ->
-    [Job#job{status=Status} | T];
-set_status_lastpid(LastPid, Status, [H|T]) ->
-    [H | set_status_lastpid(LastPid, Status, T)];
-set_status_lastpid(_, _, []) ->	%% silently ignore strange last_pid
-    [].
-
-
 current_timestamp() ->
     z_datetime:datetime_to_timestamp(erlang:localtime()).
+

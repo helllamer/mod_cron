@@ -1,6 +1,6 @@
 %% @author Konstantin Nikiforov <helllamer@gmail.com>
 %% @copyright 2011 Konstantin Nikiforov
-%% @doc Cron-like job manager extension for zotonic.
+%% @doc Routines for working with #job{} record.
 
 %% Copyright 2011 Konstantin Nikiforov
 %%
@@ -16,25 +16,33 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(cron_lib).
+-module(cron_job).
 
--export([name_sup/1, name_job_sup/1, name_job_srv/1, name_mod/1]).
+-export([
+	new/3,
+	set_nextrun/2,
+	get_job_pid/1, set_job_pid/2,
+	set_task/2
+    ]).
 
 -include("../include/cron.hrl").
 
 
-name_sup(Context) ->
-    name1(?CRON_SUP, Context).
+new(JobId, Task, JobPid) ->
+    #job{id=JobId, task=Task, pid=JobPid}.
 
-name_job_sup(Context) ->
-    name1(?CRON_JOB_SUP, Context).
 
-name_job_srv(Context) ->
-    name1(?CRON_JOB_SRV, Context).
+set_nextrun(Timestamp, Job) ->
+    Job#job{nextrun_ts=Timestamp}.
 
-name_mod(Context) ->
-    name1(mod_cron, Context).
 
-name1(Name, Context) ->
-    z_utils:name_for_host(Name, z_context:site(Context)).
+set_job_pid(Pid, Job) ->
+    Job#job{pid=Pid}.
+
+get_job_pid(#job{pid=Pid}) ->
+    Pid.
+
+
+set_task(Task, Job) ->
+    Job#job{task=Task}.
 

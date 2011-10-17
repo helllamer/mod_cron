@@ -103,43 +103,33 @@
 -author('catseye@catseye.mb.ca').
 -copyright('Copyright (c)2002 Cat`s Eye Technologies. All rights reserved.').
 
--export([start/1, stop/1, start_link/1]).
--export([loop_task/1]).
+-export([start_link/1]).
+-export([loop_task/3]).
 -export([format_time/1]).
 
-%% @spec start([task()]) -> [pid()]
-%% @doc Starts <code>crone</code>, spawning a process for each task.
-start(Tasks) ->
-  lists:foldl(fun(X, A) ->
-                [spawn_link(?MODULE, loop_task, [X]) | A]
-              end, [], Tasks).
-
-%% @doc OTP supervisor compilancy need some start_link function, that returns {ok, Pid}.
-start_link(Task) ->
-    Pid = spawn_link(?MODULE, loop_task, [Task]),
+%% @doc spawn linked task -> {ok, Pid}.
+start_link(Args) ->
+    Pid = spawn_link(?MODULE, loop_task, Args),
     {ok, Pid}.
 
-
-%% @spec stop([task()]) -> ok
-%% @doc Stops all monitoring processes started by <code>crone</code>.
-
-stop(Tasks) ->
-  lists:foreach(fun(X) ->
-                  exit(X, stopped)
-                end, Tasks),
-  ok.
 
 %% @spec loop_task(task()) -> never_returns
 %% @doc Used by <code>start/1</code> to wait until the next time
 %% each task is scheduled to run, run it, and repeat.
 
-loop_task(Task) ->
-  Duration = until_next_time(Task),
-  % io:fwrite("~p: sleeping for ~s~n", [Task, format_time(Duration)]),
-  timer:sleep(Duration * 1000),
-  run_task(Task),
-  timer:sleep(1000),
-  ?MODULE:loop_task(Task).
+loop_task(JobId, Task, JobSrv) ->
+    %% calculate sleeping time
+    Duration = until_next_time(Task),
+    %% report sleep duration to job server
+    gen_server:cast(JobSrv, {job_nextrun_in_seconds, JobId, Duration}),
+    %% main sleeping cycle
+    timer:sleep(Duration * 1000),
+    MfaPid = run_task(Task),
+    %% report about spawned MFA-process
+    gen_server:cast(JobSrv, {job_running, JobId, MfaPid}),
+    %% wait some time before next cycle. So job will not be executed twice.
+    timer:sleep(1000),
+    ?MODULE:loop_task(JobId, Task, JobSrv).  %% exported call used to support ability for code hot-replace
 
 %% @spec current_time() -> seconds()
 %%         seconds() = integer()

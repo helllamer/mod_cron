@@ -35,16 +35,18 @@
 	task,				%% Taks definition - is term, parseable by cron_task
 	pid,				%% Pid of task
 	created=erlang:localtime(),	%% When this task is added/started
-	status,				%% Current status. See CRON_JOB_STATUS_*
 	counter=0,			%% How many times this task has been executed?
-	last_exec,			%% Last execution datetime
-	last_pid,			%% Last execution pid
-	next_run_ts			%% Next execution timestamp
+	%last_exec,			%% Last execution datetime
+	nextrun_ts			%% Next execution timestamp
     }).
 
 
 -define(CRON_JOB_STATUS_RUNNING,	'running').
 -define(CRON_JOB_STATUS_WAITING,	'waiting').
+
+
+%% table for storing tasks
+-define(T_CRON_JOB,			"cron_job").
 
 
 -endif.
