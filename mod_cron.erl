@@ -70,7 +70,7 @@ start_link(Args) when is_list(Args) ->
     Context = proplists:get_value(context, Args),
     m_cron_job:install(Context),
     Name   = cron_lib:name_mod(Context),
-    Result = ?DEBUG(gen_server:start_link({local, Name}, ?MODULE, Args, [])),
+    Result = gen_server:start_link({local, Name}, ?MODULE, Args, []),
     %% add stored jobs to execution
     AddF = fun({JobId, Task}) -> ?MODULE:start_job(JobId, Task, Context) end,
     ok   = lists:foreach(AddF, m_cron_job:get_all(Context)),
@@ -103,7 +103,11 @@ handle_call({start_job, JobId, Task}, _From, #state{job_srv=JobSrv, context=Cont
     {reply, Reply, State};
 
 handle_call({stop_job, JobId}, _From, #state{job_srv=JobSrv, context=Context} = State) ->
-    ?DEBUG(cron_job_srv:delete_job(JobId, JobSrv)),
+    case cron_job_srv:delete_job(JobId, JobSrv) of
+	{error,_} -> 
+	    ?LOG("Your erlang is too old < R14B03, so I cannot stop the job (due to problem in the supervisor.erl; see OTP-9201). But you can restart the mod_cron...", []);
+	_ -> ok
+    end,
     z_notifier:notify({cron_job_stopped, JobId}, Context),
     {reply, ok, State};
 

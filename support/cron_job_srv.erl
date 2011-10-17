@@ -103,7 +103,6 @@ handle_call({add_job, JobId, Task}, _From, #state{job_sup=JobSup, job_srv=JobSrv
 	    State#state{jobs=Jobs1}
 
     end,
-    ?DEBUG(JobPid),
     {reply, {ok, JobPid}, ResultState};
 
 %% Return current job list

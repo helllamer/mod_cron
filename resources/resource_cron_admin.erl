@@ -62,7 +62,7 @@ event({submit, insert_job, _TriggerId, _TargetId}, Context) ->
 
 %% delete existing job
 event({postback, {delete_job, [{job_id, JobId}]}, _TriggerId, _TargetId}, Context) ->
-    ?DEBUG(m_cron_job:delete(JobId, Context)),
+    m_cron_job:delete(JobId, Context),
     Context.
 
 

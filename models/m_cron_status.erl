@@ -43,12 +43,13 @@ m_value(_M, _Context) ->
 %% Pre-render list of cron_job_srv
 format_served(Context) ->
     {ok, Jobs} = cron_job_srv:jobs(Context),
-    F = fun(#job{id=Id, pid=Pid, task={When, {M,F,A}}, created=Created, nextrun_ts=NextrunTs}) ->
+    F = fun(#job{id=Id, pid=Pid, task={When, {M,F,A}}, created=Created, nextrun_ts=NextrunTs, counter=Counter}) ->
 	    [{id,	Id},
 	     {'when',	str(When)},
 	     {mfa,	str_mfa(M,F,A)},
 	     {pid,	str(Pid)},
 	     {created,	Created},
+	     {counter,	Counter},
 	     {nextrun,	z_datetime:timestamp_to_datetime(NextrunTs)} ]
     end,
     lists:map(F, Jobs).
