@@ -68,7 +68,7 @@ init([SrvName, Context]) ->
 	name	= SrvName,
 	context = Context,
 	jobs	= orddict:new(),
-	pid	= orddict:new()
+	mfa_pids= orddict:new()
     },
     {ok, State}.
 
@@ -77,6 +77,12 @@ init([SrvName, Context]) ->
 handle_call({add_job, JobId, Task}, _From, #state{context=Context, jobs=Jobs0} = State) ->
     ResultState = case lookup_job(JobId, Jobs0) of
 	
+	%% No job with such id is started. Start new job.
+	undefined ->
+	    {ok, JobPid} = start_job(JobId, Task, Context),
+	    Jobs1 = add_job1(JobId, Task, Pid, Jobs0),
+	    State#state{jobs=Jobs1};
+
 	%% Same task is already here - ignore
 	{ok, #job{pid=JobPid, task=Task} = _Job} ->
 	    State;
@@ -87,12 +93,6 @@ handle_call({add_job, JobId, Task}, _From, #state{context=Context, jobs=Jobs0} =
 	    {ok, JobPid} = start_job(JobId, Task, Context),
 	    Job1  = Job#job{pid=JobPid, task=Task},
 	    Jobs1 = add_job1(JobId, Job1, Jobs0),
-	    State#state{jobs=Jobs1};
-
-	%% No job started. Just start it.
-	undefined ->
-	    {ok, JobPid} = start_job(JobId, Task, Context),
-	    Jobs1 = add_job1(JobId, Task, Pid, Jobs0),
 	    State#state{jobs=Jobs1}
 
     end,
@@ -118,19 +118,24 @@ handle_call(Request, _From, State) ->
     {reply, {badarg, Request}, State}.
 
 
-%% Some running job is reporting activity
-handle_cast({update_job_info, JobId, Info}, #state{jobs=Jobs} = State) ->
-    Jobs1 = update_job(JobId, Info, Jobs),
+%% Job process reporting about time of next run (seconds after now).
+handle_cast({job_next_run_in, JobId, Seconds}, #state{jobs=Jobs0} = State) ->
+    UpdateF = fun(Job) -> #job{next_run_ts=current_timestamp()+Seconds} end,
+    Jobs1 = orddict:update(JobId, UpdateF, Jobs0),
     {noreply, State#state{jobs=Jobs1}};
+%% Some running job is being executed. Add pid+job_id into mfa_pids list.
+handle_cast({job_running, JobId, MfaPid}, #state{mfa_pids=MfaPids0} = State) ->
+    MfaPids1 = orddict:store(MfaPid, JobId, MfaPids0),
+    {noreply, State#state{mfa_pids=MfaPids1}};
 
 handle_cast(_Request, State) ->
     {noreply, State}.
 
 
-%% Attached job subprocess is finished.
-handle_info({'EXIT', FromPid, _Reason}, #state{jobs=Jobs} = State) ->
-    Jobs1 = set_status_lastpid(FromPid, ?CRON_JOB_STATUS_WAITING, Jobs),
-    {noreply, State#state{jobs=Jobs1}};
+%% Linked job mfa is finished: remove it from mfa_pids.
+handle_info({'EXIT', MfaPid, _Reason}, #state{mfa_pids=MfaPids0} = State) ->
+    MfaPids1 = orddict:erase(MfaPid, MfaPids0),
+    {noreply, State#state{mfa_pids=MfaPids1}};
 handle_info(_Info, State) ->
     {noreply, State}.
 
