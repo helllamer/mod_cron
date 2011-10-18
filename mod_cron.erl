@@ -77,9 +77,10 @@ start_link(Args) when is_list(Args) ->
     %% start this server
     Name   = cron_lib:name_mod(Context),
     Result = gen_server:start_link({local, Name}, ?MODULE, Args, []),
-    %% run stored jobs
+    %% collect stored jobs and run them
     AddF = fun({JobId, Task}) -> z_notifier:first({cron_job_start, JobId, Task}, Context) end,
-    ok   = lists:foreach(AddF, m_cron_job:get_all(Context)),
+    StoredJobs = m_cron_job:get_all(Context),
+    ok   = lists:foreach(AddF, StoredJobs),
     %% Return start_link return value.
     Result.
 
