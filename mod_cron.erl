@@ -106,12 +106,15 @@ init(Args) ->
 
 %% to start the cron job
 handle_call({{cron_job_start, JobId, Task}, _}, _From, #state{job_srv=JobSrv, context=Context} = State) ->
-    Reply = case cron_job_srv:add_job(JobId, Task, JobSrv) of
-	{ok, Pid} = Result ->
-	    z_notifier:notify({cron_job_started, JobId, Task, Pid}, Context),
-	    Result;
+    Reply = run_job1(JobId, Task, JobSrv, Context),
+    {reply, Reply, State};
 
-	E -> E
+%% start previously stopped job. Task is undefined, so it will extracted from DB.
+handle_call({{cron_job_start, JobId}, _}, _From, #state{job_srv=JobSrv, context=Context} = State) ->
+    %% get task from DB and run the job.
+    Reply = case m_cron_job:get_task(JobId, Context) of
+	undefined  -> {error, not_found};
+	{ok, Task} -> run_job1(JobId, Task, JobSrv, Context)
     end,
     {reply, Reply, State};
 
@@ -147,3 +150,13 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Internal functions %%%
+
+run_job1(JobId, Task, JobSrv, Context) ->
+    case cron_job_srv:add_job(JobId, Task, JobSrv) of
+	{ok, Pid} = Result ->
+	    z_notifier:notify({cron_job_started, JobId, Task, Pid}, Context),
+	    Result;
+
+	E -> E
+    end.
+

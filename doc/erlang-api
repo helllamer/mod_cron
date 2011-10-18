@@ -72,8 +72,15 @@ You can see list of example task object in start().
 
 6. Stop job.
    Just stop the job. Job will not be removed from DB.
+   If job is temporarily (see 5), the job will be lost.
 
 	z_notifier:first({cron_job_stop, JobId}, Context) -> ok.
+
+7. Start existing job.
+   You stop job via cron_job_stop. If job is stored in DB, you can also continue this stopped job.
+   If job already running, it will be restarted.
+
+	z_notifier:first({cron_job_start, JobId}, Context) -> {ok, job_id()}.
 
 
 == Outgoing notifications ==
