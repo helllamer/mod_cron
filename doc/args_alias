@@ -1,0 +1,20 @@
+When you creating a job, you are passing a list of arguments.
+Usually, you want to pass zotonic #context{} record. What to do in this case?
+
+You can use so-called aliases. It is simple. You just need to place atom 
+with @-sign in the tail instead of argument.
+
+For example: echo site #context{} record into stdout:
+
+M:	io
+F:	format
+A:	"~p~n", [context@]
+
+As you can see in console, 'context@' atom will be replaced with #context{} record
+of current host.
+
+
+List of available aliases and values:
+
+ * context@		#context{}. ~result of z:c(current_host).
+ * context_sudo@	Result of z_acl:sudo(#context{}).

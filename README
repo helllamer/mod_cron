@@ -2,7 +2,6 @@ mod_cron is a task scheduler for zotonic framework.
 
 mod_cron can launch any M:F(A) in very flexible time cycles.
 
-
 == Quickstart ==
 
 1. zotonic installmodule mod_cron

@@ -77,14 +77,16 @@ init([{Sup, JobSup, JobSrv} = _Names, Context]) ->
 
 
 %% run a new job, if not already running
-handle_call({add_job, JobId0, Task}, _From, #state{job_sup=JobSup, job_srv=JobSrv, jobs=Jobs0} = State) ->
+handle_call({add_job, JobId0, Task0}, _From, #state{job_sup=JobSup, job_srv=JobSrv, jobs=Jobs0} = State) ->
+    %% Task0 is raw task. Task - is a postprocessed version, where aliases are replaced with valid values.
+    Task  = postprocess_task(Task0, State),
     JobId = z_convert:to_binary(JobId0),
     ResultState = case lookup_job(JobId, Jobs0) of
 	
 	%% No job with such id is started. Start new job.
 	undefined ->
 	    {ok, JobPid} = cron_sup:start_job(JobId, [JobId, Task, JobSrv], JobSup),
-	    Job	  = cron_job:new(JobId, Task, JobPid),
+	    Job	  = cron_job:new(JobId, Task0, JobPid),
 	    Jobs1 = orddict:store(JobId, Job, Jobs0),
 	    State#state{jobs=Jobs1};
 
@@ -97,7 +99,7 @@ handle_call({add_job, JobId0, Task}, _From, #state{job_sup=JobSup, job_srv=JobSr
 	    stop_job1(JobId, JobSup),
 	    {ok, JobPid} = cron_sup:start_job(JobId, [JobId, Task, JobSrv], JobSup),
 	    Job1  = cron_job:set_job_pid(JobPid,
-			cron_job:set_task(Task, Job)
+			cron_job:set_task(Task0, Job)
 		    ),
 	    Jobs1 = orddict:store(JobId, Job1, Jobs0),
 	    State#state{jobs=Jobs1}
@@ -195,4 +197,31 @@ stop_job1(JobId, JobSup) ->
 
 current_timestamp() ->
     z_datetime:datetime_to_timestamp(erlang:localtime()).
+
+
+%% any filters for postprocessing the task body.
+postprocess_task(Task, State) ->
+    postprocess_args(Task, State).
+
+%% replace arg aliases with expected values
+postprocess_args({When, {M,F,Args0}}, State) ->
+    Args1 = postprocess_args1(Args0, State),
+    {When, {M,F,Args1}}.
+
+%% use dummy context.
+%% @todo Add more aliases!
+postprocess_args1(['context@' | T], State) ->
+    [State#state.context | postprocess_args1(T, State)];
+%% context with admin rights
+postprocess_args1(['context_sudo@' | T], State) ->
+    ContextSudo = z_acl:sudo(State#state.context),
+    [ContextSudo | postprocess_args1(T, State)];
+%% inner list of args (not string) should be also postprocessed
+postprocess_args1([ [H|_]=List | T], State) when not is_integer(H) ->
+    [postprocess_args1(List,State) | postprocess_args1(T,State)];
+%% other args are skipped
+postprocess_args1([H|T], State) ->
+    [H | postprocess_args1(T, State)];
+postprocess_args1([], _State) ->
+    [].
 

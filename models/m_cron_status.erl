@@ -68,5 +68,6 @@ str(Term) ->
 str_mfa(M,F,A) ->
     [ $[ | Args0] = lists:flatten(io_lib:format("~p", [A])),
     Args1 = lists:sublist(Args0, length(Args0) - 1),
-    io_lib:format("~p:~p(" ++ Args1 ++ ").", [M,F]).
+    MF = io_lib:format("~p:~p(", [M,F]),
+    MF ++ Args1 ++ ").".
 
