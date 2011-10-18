@@ -23,12 +23,11 @@
 
 -behaviour(gen_server).
 
-%% internal API
--export([ start_job/3, stop_job/2 ]).
-
 %% z_notifier pins
 -export([
+	observe_cron_job_insert/2,
 	observe_cron_job_inserted/2,
+	observe_cron_job_delete/2,
 	observe_cron_job_deleted/2
     ]).
 
@@ -48,31 +47,38 @@
 -include("include/cron.hrl").
 -include("include/zotonic.hrl").
 
+%% Server will subscribe on this events on init() and unsubscribe on terminate().
+-define(MOD_SRV_SUBSCRIBE, [cron_job_start, cron_job_stop]).
 
-%% message from m_cron_job about new job insertion. Add job to execution.
+
+%% @doc External management: add job to db and start.
+observe_cron_job_insert({cron_job_insert, JobId, Task}, Context) ->
+    m_cron_job:insert(JobId, Task, Context).
+
+%% @doc External management: remove job from db and stop.
+observe_cron_job_delete({cron_job_delete, JobId}, Context) ->
+    m_cron_job:delete(JobId, Context).
+
+
+%% @doc message from m_cron_job about new job insertion. Add job to execution.
 observe_cron_job_inserted({cron_job_inserted, JobId, Task}, Context) ->
-    start_job(JobId, Task, Context).
+    z_notifier:first({cron_job_start, JobId, Task}, Context).
 
+%% @doc message from m_cron_job about job deletion. Remove job from execution.
 observe_cron_job_deleted({cron_job_deleted, JobId}, Context) ->
-    stop_job(JobId, Context).
+    z_notifier:first({cron_job_stop, JobId}, Context).
 
-%% @doc run a new job
-start_job(JobId, Task, Context) ->
-    call_ctx({start_job, JobId, Task}, Context).
 
-%% @doc stop and remove job from execution queue
-stop_job(JobId, Context) ->
-    call_ctx({stop_job, JobId}, Context).
-    
-
-%% start this server
+%% @doc start this server
 start_link(Args) when is_list(Args) ->
     Context = proplists:get_value(context, Args),
+    %% ensure db schema
     m_cron_job:install(Context),
+    %% start this server
     Name   = cron_lib:name_mod(Context),
     Result = gen_server:start_link({local, Name}, ?MODULE, Args, []),
-    %% add stored jobs to execution
-    AddF = fun({JobId, Task}) -> ?MODULE:start_job(JobId, Task, Context) end,
+    %% run stored jobs
+    AddF = fun({JobId, Task}) -> z_notifier:first({cron_job_start, JobId, Task}, Context) end,
     ok   = lists:foreach(AddF, m_cron_job:get_all(Context)),
     %% Return start_link return value.
     Result.
@@ -84,15 +90,22 @@ start_link(Args) when is_list(Args) ->
 init(Args) ->
     process_flag(trap_exit, true),
     {context, Context} = proplists:lookup(context, Args),
+    %% Names of other servers/supervisors
     Sup	    = cron_lib:name_sup(Context),
     JobSup  = cron_lib:name_job_sup(Context),
     JobSrv  = cron_lib:name_job_srv(Context),
+    %% start level-1 supervisor.
     {ok, _} = cron_sup:start_link({Sup, JobSup, JobSrv}, Context),
+    %% Subscribe to z_notifier events.
+    Self = self(),
+    ok = lists:foreach(fun(E) -> z_notifier:observe(E, Self, Context) end, ?MOD_SRV_SUBSCRIBE),
+    %% ok!
     State   = #state{sup=Sup, job_sup=JobSup, job_srv=JobSrv, context=Context},
     {ok, State}.
 
 
-handle_call({start_job, JobId, Task}, _From, #state{job_srv=JobSrv, context=Context} = State) ->
+%% to start the cron job
+handle_call({{cron_job_start, JobId, Task}, _}, _From, #state{job_srv=JobSrv, context=Context} = State) ->
     Reply = case cron_job_srv:add_job(JobId, Task, JobSrv) of
 	{ok, Pid} = Result ->
 	    z_notifier:notify({cron_job_started, JobId, Task, Pid}, Context),
@@ -102,12 +115,9 @@ handle_call({start_job, JobId, Task}, _From, #state{job_srv=JobSrv, context=Cont
     end,
     {reply, Reply, State};
 
-handle_call({stop_job, JobId}, _From, #state{job_srv=JobSrv, context=Context} = State) ->
-    case cron_job_srv:delete_job(JobId, JobSrv) of
-	{error,_} -> 
-	    ?LOG("Your erlang is too old < R14B03, so I cannot stop the job (due to problem in the supervisor.erl; see OTP-9201). But you can restart the mod_cron...", []);
-	_ -> ok
-    end,
+%% stop job process
+handle_call({{cron_job_stop, JobId}, _}, _From, #state{job_srv=JobSrv, context=Context} = State) ->
+    cron_job_srv:delete_job(JobId, JobSrv),
     z_notifier:notify({cron_job_stopped, JobId}, Context),
     {reply, ok, State};
 
@@ -125,8 +135,10 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 
-terminate(_Reason, _State) ->
-    ok.
+%% @doc Server stops. It is time to unsubscribe from z_notifier events.
+terminate(_Reason, #state{context=Context}) ->
+    Self = self(),
+    lists:foreach(fun(E) -> z_notifier:detach(E, Self, Context) end, ?MOD_SRV_SUBSCRIBE).
 
 
 code_change(_OldVsn, State, _Extra) ->
@@ -135,12 +147,3 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Internal functions %%%
-
-call_ctx(Req, Context) ->
-    ModSrv = name(Context),
-    gen_server:call(ModSrv, Req).
-
-
-name(Context) ->
-    cron_lib:name_mod(Context).
-

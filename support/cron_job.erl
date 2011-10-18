@@ -20,9 +20,10 @@
 
 -export([
 	new/3,
-	set_nextrun/2,
+	get_nextrun/1, set_nextrun/2,
 	get_job_pid/1, set_job_pid/2,
-	set_task/2
+	get_task/1,    set_task/2,
+	get_counter/1, inc_counter/1
     ]).
 
 -include("../include/cron.hrl").
@@ -32,17 +33,26 @@ new(JobId, Task, JobPid) ->
     #job{id=JobId, task=Task, pid=JobPid}.
 
 
+get_nextrun(#job{nextrun_ts=Timestamp}) ->
+    Timestamp.
 set_nextrun(Timestamp, Job) ->
     Job#job{nextrun_ts=Timestamp}.
 
 
 set_job_pid(Pid, Job) ->
     Job#job{pid=Pid}.
-
 get_job_pid(#job{pid=Pid}) ->
     Pid.
 
 
+get_task(#job{task=Task}) ->
+    Task.
 set_task(Task, Job) ->
     Job#job{task=Task}.
+
+
+get_counter(#job{counter=Count}) ->
+    Count.
+inc_counter(#job{counter=Count} = Job) ->
+    Job#job{counter=Count+1}.
 

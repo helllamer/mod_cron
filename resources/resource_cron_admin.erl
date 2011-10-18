@@ -53,7 +53,7 @@ event({submit, insert_job, _TriggerId, _TargetId}, Context) ->
     {ok,F} = parse_term(Q("function")),
     {ok,A} = parse_term(ensure_list(Q("args"))),
     Task   = {When, {M,F,A}},
-    case m_cron_job:insert(JobId, Task, Context) of
+    case z_notifier:first({cron_job_insert, JobId, Task}, Context) of
 	{ok,_}	-> RA = [{dialog_close, []}, {reload, []}],
 		   z_render:wire(RA, Context);
 	E	-> EText = io_lib:format("Error: ~p", [E]),
@@ -62,7 +62,7 @@ event({submit, insert_job, _TriggerId, _TargetId}, Context) ->
 
 %% delete existing job
 event({postback, {delete_job, [{job_id, JobId}]}, _TriggerId, _TargetId}, Context) ->
-    m_cron_job:delete(JobId, Context),
+    z_notifier:notify({cron_job_delete, JobId}, Context),
     Context.
 
 

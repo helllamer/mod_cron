@@ -18,11 +18,13 @@
 
 -module(cron_sup).
 
+-behaviour(supervisor).
+
 %% Internal API
 -export([
 	start_link/2,
 	stop_all_jobs/1,
-	start_job/2,
+	start_job/3,
 	stop_job/2,
 	job_pids/1
     ]).
@@ -44,13 +46,21 @@ stop_all_jobs(Context) ->
 
 
 %% @doc launch a new job
-start_job(Args, JobSup) ->
-    supervisor:start_child(JobSup, [Args]).
+start_job(JobId, Args, JobSup) ->
+    ChildSpec = childdef_job(JobId, [Args]),
+    case supervisor:start_child(JobSup, ChildSpec) of
+	{ok, _Pid} = Result			-> Result;
+	{ok, Pid, _Info}			-> {ok, Pid};
+	{error, {already_started, _Pid}}	-> stop_job(JobId, JobSup),
+						   start_job(JobId, Args, JobSup);
+	{error, already_present}		-> supervisor:delete_child(JobSup, JobId),
+						   start_job(JobId, Args, JobSup)
+    end.
 
 
 %% @doc stop the job by pid.
-stop_job(Pid, JobSup) when is_pid(Pid) ->
-    supervisor:terminate_child(JobSup, Pid).
+stop_job(JobId, JobSup) ->
+    supervisor:terminate_child(JobSup, JobId).
 
 
 %% @doc list all running job pids
@@ -87,20 +97,25 @@ init([sup, {_, JobSup, JobSrv} = Names, Context]) ->
 	}
     };
 
-%% @doc level-2 supervisor. Simple-1-for-1 sup. is able to dynamically start job-processes as childs with any args passed from start_child/2.
+%% @doc level-2 one-for-one supervisor.
+%% Previously, simple_one_for_one was used, but due to compatibility problems (OTP-9201)
+%% and other management issues, it was replaced by one_for_one.
 init(job_sup) ->
     io:format("1", []),
     {ok,
-	{_SupFlags = {simple_one_for_one, ?CRON_MAX_RESTART, ?CRON_MAX_TIME},
-	    [
-		{   undefined,
-		    {cron_task, start_link, []},	%% No args here. Only arg will be in start_job/1.
-		    permanent,
-		    brutal_kill,
-		    worker,
-		    [cron_task]
-		}
-	    ]
+	{_SupFlags = {one_for_one, ?CRON_MAX_RESTART, ?CRON_MAX_TIME},
+	    []	  %% no children. They will be dynamically added later.
 	}
+    }.
+
+%% @hidden generate child definition for level-2 supervisor.
+childdef_job(JobId, Args) ->
+    {
+	JobId,
+	{cron_task, start_link, Args},
+	permanent,
+	brutal_kill,
+	worker,
+	[cron_task]
     }.
 

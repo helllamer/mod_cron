@@ -14,8 +14,3 @@ mod_cron can launch any M:F(A) in very flexible time cycles.
 7. In dialog appeared, you need to fill name of job, describe time intervals and
    M:F(A) to run.
 
-
-== Known bugs ==
-
-1. Task will not stop on delete, if erlang < R14B03. Update your erlang version.
-

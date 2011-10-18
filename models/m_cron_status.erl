@@ -42,7 +42,7 @@ m_value(_M, _Context) ->
 
 %% Pre-render list of cron_job_srv
 format_served(Context) ->
-    {ok, Jobs} = cron_job_srv:jobs(Context),
+    {ok, Jobs} = z_notifier:first(cron_jobs_list, Context),
     F = fun(#job{id=Id, pid=Pid, task={When, {M,F,A}}, created=Created, nextrun_ts=NextrunTs, counter=Counter}) ->
 	    [{id,	Id},
 	     {'when',	str(When)},

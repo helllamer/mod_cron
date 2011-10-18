@@ -18,10 +18,22 @@
 
 -module(m_cron_job).
 
+-behaviour(gen_model).
+-export([m_find_value/3, m_to_list/2, m_value/2]).
 -export([get_task/2, get_all/1, insert/3, update/3, delete/2, install/1]).
 
 -include("../include/cron.hrl").
 -include("zotonic.hrl").
+
+%% @todo
+m_find_value(_, _M, _Context) ->
+    <<"Not yet implemented">>.
+
+m_to_list(_M, _Context) ->
+    [].
+
+m_value(_M, _Context) ->
+    undefined.
 
 
 %% get task from db -> undefined | {ok, Task}
@@ -38,11 +50,13 @@ get_all(Context) ->
 
 
 %% insert/update task
-insert(JobId, Task, Context) ->
+insert(JobId, Task, Context) when is_binary(JobId) ->
     case get_task(JobId, Context) of
 	undefined -> insert_nocheck(JobId, Task, Context);
 	{ok, _}	  -> update(JobId, Task, Context)
-    end.
+    end;
+insert(JobId, Task, Context) ->
+    insert(z_convert:to_binary(JobId), Task, Context).
 
 insert_nocheck(JobId, Task, Context) ->
     Props = [
@@ -53,11 +67,14 @@ insert_nocheck(JobId, Task, Context) ->
     z_notifier:notify({cron_job_inserted, JobId, Task}, Context),
     Result.
 
+
 %% update task data for job
-update(JobId, Task, Context) ->
+update(JobId, Task, Context) when is_binary(JobId) ->
     RowsUpdated = z_db:q1("UPDATE " ++ ?T_CRON_JOB ++ " SET task = $2 WHERE id = $1", [JobId, Task], Context),
     RowsUpdated > 0 andalso z_notifier:notify({cron_job_inserted, JobId, Task}, Context),
-    {ok, RowsUpdated}.
+    {ok, RowsUpdated};
+update(JobId, Task, Context) ->
+    update(z_convert:to_binary(JobId), Task, Context).
 
 
 %% @doc delete existing job

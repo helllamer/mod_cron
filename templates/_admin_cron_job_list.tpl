@@ -8,8 +8,9 @@
 	    <br/>
 	    <span class="zp-100">{{ job.mfa }}</span>
 	    <br/>
-	    <span class="zp-50">Created: {{ job.created|date:"d.m.Y H:i" }}</span>
-	    <span class="zp-50">Next run: {{ job.nextrun|date:"d.m.Y H:i:s" }}</span>
+	    <span class="zp-30">Created: {{ job.created|date:"d.m.Y H:i" }}</span>
+	    <span class="zp-30">Next run: {{ job.nextrun|date:"d.m.Y H:i:s" }}</span>
+	    <span class="zp-30">Executed: {{ job.counter }} times</span>
 	    <br/>
 	    <span class="zp-95">When: {{ job.when }}</span>
 	</li>

@@ -1,0 +1,102 @@
+= mod_crone erlang API =
+
+You can add/remove tasks using erlang calls without using of /admin/cron interface.
+Only z_notifier should be used to manage mod_cron daemon.
+
+
+== Data Types ==
+
+* JobId is a key. It is stored in db with task body.
+  Technically, job_id is a binary string. There are no limitation on this id.
+
+job_id()     = binary()
+
+  JobIds should not conflict, or one job will overwrite other job with same id.
+
+
+* Job = Task + process pid + metadata (couter, next run datetime, etc)
+  Technically, Job is a record, defined in include/cron.hrl.
+  You can read/write job object using module cron_job.
+
+job()	     = #job{}
+jobs()	     = [job()]
+
+
+* Task = {When, MFA}. Look at following copypaste from support/cron_task.erl:
+
+task()       = {when(), mfa()}
+mfa()        = {module(), function(), args()}
+when()       = {daily, period()}
+             | {weekly, dow(), period()} 
+             | {monthly, dom(), period()}
+dow()        = mon | tue | wed | thu | fri | sat | sun
+dom()        = integer()
+period()     = time() | [time()] | {every, duration(), constraint()}
+duration()   = {integer(), hr | min | sec}
+constraint() = {between, time(), time()}
+time()       = {integer(), am | pm} | {integer(), integer(), am | pm}
+
+
+As you can see, it is possible to define almost any interval of time to run some MFA.
+Now, look at http://catseye.tc/projects/crone/src/crone_test.erl
+You can see list of example task object in start().
+
+
+== mod_cron calls ===
+
+1. Insert job
+   Job will be saved into DB and started as soon as possible.
+   
+	z_notifier:first({cron_job_insert, job_id(), task()}, Context) -> {ok, JobId}.
+
+2. Delete job
+   Stop job, remove from execution, remove from database.
+
+	z_notifier:first({cron_job_delete, JobId}, Context) -> ok.
+
+3. List all jobs.
+   Call returns a list of #job{} records. To extract values from some record, module 'cron_job' must be used.
+	
+	z_notifier:first(cron_jobs_list, Context) -> {ok, jobs()}.
+
+4. Get job by id.
+   Returns a #job{}, if exist.
+
+	z_notifier:first({cron_job_get, JobId}, Context) -> {ok, job()} | undefined.
+
+
+== Outgoing notifications ==
+
+During workflow, mod_cron broadcasts notifications about own activity.
+You can listen and analyze this messages using z_notifier:observer(Event, Observer, Context)
+where Observer is pid/M:F(A)/etc.
+
+1. {cron_job_inserted, job_id(), task()}.
+   Somebody called "cron_job_insert", and new job was successfully saved in the DB. The job will be started in couple of moments.
+   This notification also occurs, if task() has been updated in DB.
+
+2. {cron_job_deleted, job_id()}.
+   Somebody called cron_job_delete and job was successfully removed from DB.
+
+3. {cron_job_nextrun, job_id(), NextRunTimestamp::integer()}
+   The job is scheduled to run. NextRunTimestamp is a standard UNIX timestamp.
+
+4. {cron_job_executed, job_id()}.
+   Some job has been executed moments ago. This message also goes in couple with cron_job_nextrun.
+
+5. {cron_job_started, job_id(), task(), pid()}.
+   Some added task is successfully started. Job process is spawned.
+   This message is emitted only after insertion a new job.
+
+6. {cron_job_stopped, job_id()}
+   Job was stopped from execution. This message usually comes coupled with cron_job_deleted.
+
+
+== cron_job ==
+
+To extract values from #job record, module cron_job must be used:
+
+	cron_job:get_task(job()) -> task()
+
+See source code of cron_job to full list of functions.
+
