@@ -1,4 +1,3 @@
 - Someone, please write the good user interface from /admin/cron
-- Unit tests, we need tests
+- Testing, we need tests
 - Ability to edit task in /admin/cron
-- Need parser and aliases for A in M:F(A). For example, i've want to pass #context{} into args. So,...
