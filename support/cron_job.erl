@@ -23,7 +23,9 @@
 	get_nextrun/1, set_nextrun/2,
 	get_job_pid/1, set_job_pid/2,
 	get_task/1,    set_task/2,
-	get_counter/1, inc_counter/1
+	get_counter/1, inc_counter/1,
+	get_id/1,
+	get_date_created/1
     ]).
 
 -include("../include/cron.hrl").
@@ -56,3 +58,9 @@ get_counter(#job{counter=Count}) ->
 inc_counter(#job{counter=Count} = Job) ->
     Job#job{counter=Count+1}.
 
+
+get_id(#job{id=JobId}) ->
+    JobId.
+
+get_date_created(#job{created=DateCreated}) ->
+    DateCreated.

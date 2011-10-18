@@ -4,7 +4,8 @@ Usually, you want to pass zotonic #context{} record. What to do in this case?
 You can use so-called aliases. It is simple. You just need to place atom 
 with @-sign in the tail instead of argument.
 
-For example: echo site #context{} record into stdout:
+For example: echo site #context{} record into stdout. Create cron job with
+following MFA:
 
 M:	io
 F:	format

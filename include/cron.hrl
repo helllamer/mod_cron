@@ -36,7 +36,6 @@
 	pid,				%% Pid of task
 	created=erlang:localtime(),	%% When this task is added/started
 	counter=0,			%% How many times this task has been executed?
-	%last_exec,			%% Last execution datetime
 	nextrun_ts			%% Next execution timestamp
     }).
 
