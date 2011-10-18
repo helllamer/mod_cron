@@ -14,7 +14,7 @@ job_id()     = binary()
   JobIds should not conflict, or one job will overwrite other job with same id.
 
 
-* Job = Task + process pid + metadata (couter, next run datetime, etc)
+* Job = Task + process pid + metadata (execution counter, next run datetime, etc)
   Technically, Job is a record, defined in include/cron.hrl.
   You can read/write job object using module cron_job.
 
@@ -66,7 +66,7 @@ You can see list of example task object in start().
 	z_notifier:first({cron_job_get, JobId}, Context) -> {ok, job()} | undefined.
 
 
-5. Run temporariy job. Job will NOT be stored inside DB.
+5. Run temporarily job. Job will NOT be stored inside DB.
 
 	z_notifier:first({cron_job_start, JobId, Task}, Context) -> {ok, job_id()}.
 
