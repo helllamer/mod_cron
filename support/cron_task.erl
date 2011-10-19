@@ -33,8 +33,8 @@
 
 -export([
 	new/0,	    new/2,
-	set_mfa/4,  parse_mfa/3,
-	set_when/2, parse_when/1
+	get_mfa/1,  set_mfa/4,  parse_mfa/3,
+	get_when/1, set_when/2, parse_when/1
     ]).
 
 %% @doc create empty task tuple.
@@ -49,9 +49,16 @@ new(When, MFA) ->
 set_mfa(M,F,A, {When, _}) ->
     new(When, {M,F,A}).
 
-%% @doc replace When-clause from task
+%% @doc get MFA from task object.
+get_mfa({_, MFA}) -> MFA.
+
+
+%% @doc replace When-clause from task.
 set_when(When, {_, MFA}) ->
     new(When, MFA).
+
+%% @doc get When clause from task object
+get_when({When, _}) -> When.
 
 
 %% @doc Parse Module-Function-Args combination
