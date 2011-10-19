@@ -32,9 +32,10 @@
 -module(cron_task).
 
 -export([
-	new/0,	    new/2,
+	new/0,	    new/2,	new/4,
 	get_mfa/1,  set_mfa/4,  parse_mfa/3,
-	get_when/1, set_when/2, parse_when/1
+	get_when/1, set_when/2, parse_when/1,
+	parse_args/1
     ]).
 
 %% @doc create empty task tuple.
@@ -44,6 +45,9 @@ new() ->
 %% @doc create task tuple with data
 new(When, MFA) ->
     {When, MFA}.
+
+new(When, M,F,A) ->
+    {When, {M,F,A}}.
 
 %% @doc replace MFA for task
 set_mfa(M,F,A, {When, _}) ->
@@ -63,15 +67,24 @@ get_when({When, _}) -> When.
 
 %% @doc Parse Module-Function-Args combination
 parse_mfa(M, F, A) ->
-    M1 = parse_term(M),
-    F1 = parse_term(F),
-    A1 = parse_term(ensure_list(A)),
-    {ok, {M1,F1,A1}}.
+    M1 = z_convert:to_atom(M),
+    F1 = z_convert:to_atom(F),
+    A1 = parse_args(A),
+    {M1,F1,A1}.
+
+
+%% @doc to parse arguments list string
+parse_args([H|_]=ArgsStr) when is_integer(H) ->
+    parse_term(ensure_list(ArgsStr));
+parse_args(Args) when is_list(Args) ->
+    Args;
+parse_args(Args) when is_binary(Args) ->
+    parse_args(binary_to_list(Args)).
 
 
 %% @doc Parse when clause from string.
 parse_when(When) ->
-    {ok, parse_term(When)}.
+    parse_term(When).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%

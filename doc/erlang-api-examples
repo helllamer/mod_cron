@@ -1,0 +1,15 @@
+%% To call io:format("~p", [context@]) every 10 seconds all day
+example1(Context) ->
+    JobId = <<"my job #1">>,
+    When = {daily, {every,{5,sec},{between,{0,am},{11,59,pm}}}},
+    Task = cron_task:new(When, io, format, ["~p", [context@]]),
+    {ok, _} = z_notifier:first({cron_job_insert, JobId, Task}).
+
+
+%% Parse MFA from string. Start *temporarily* job. Job will be dropped on stop.
+example2(ArgsString, Context) ->
+    JobId = <<"my other job">>,
+    When  = {weekly, wed, {2, am}},
+    Args  = cron_task:parse_args(ArgsString),
+    Task  = cron_task:new(When, io, format, Args),
+    {ok,_} = z_notifier:first({cron_job_start, JobId, Task}).

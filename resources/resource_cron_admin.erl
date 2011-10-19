@@ -47,9 +47,9 @@ event({submit, insert_job, _TriggerId, _TargetId}, Context) ->
     Q = fun(Param) -> z_context:get_q(Param, Context) end,
     JobId = Q(id),
     %% parsing time definition into erlang term
-    {ok, When} = cron_task:parse_when(Q("when")),
-    {ok, Mfa}  = cron_task:parse_mfa(Q("module"), Q("function"), Q("args")),
-    Task       = cron_task:new(When, Mfa),
+    When = cron_task:parse_when(Q("when")),
+    Mfa  = cron_task:parse_mfa(Q("module"), Q("function"), Q("args")),
+    Task = cron_task:new(When, Mfa),
     case z_notifier:first({cron_job_insert, JobId, Task}, Context) of
 	{ok,_}	-> RA = [{dialog_close, []}, {reload, []}],
 		   z_render:wire(RA, Context);

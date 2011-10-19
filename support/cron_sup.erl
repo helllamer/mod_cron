@@ -101,7 +101,6 @@ init([sup, {_, JobSup, JobSrv} = Names, Context]) ->
 %% Previously, simple_one_for_one was used, but due to compatibility problems (OTP-9201)
 %% and other management issues, it was replaced by one_for_one.
 init(job_sup) ->
-    io:format("1", []),
     {ok,
 	{_SupFlags = {one_for_one, ?CRON_MAX_RESTART, ?CRON_MAX_TIME},
 	    []	  %% no children. They will be dynamically added later.
