@@ -60,12 +60,13 @@ event({submit, insert_job, _TriggerId, _TargetId}, Context) ->
 		   z_render:growl_error(EText, Context)
     end;
 
-%% delete existing job
+%% delete existing job.
 event({postback, {delete_job, [{job_id, JobId}]}, _TriggerId, _TargetId}, Context) ->
     z_notifier:notify({cron_job_delete, JobId}, Context),
     Context.
 
 
+%%% Parsing routines: we need to properly parse user's input of "when" and "args".
 %% erl_parse wants to see dot at the end. Add the dot:
 ensure_dot_end(Str) ->
     case lists:last(Str) of
@@ -73,6 +74,7 @@ ensure_dot_end(Str) ->
 	_  -> Str ++ "."
     end.
 
+%% eralng terms parser. Wrapper around erl_scan and erl_parse.
 parse_term(Str) ->
     Str1 = ensure_dot_end(Str),
     try
@@ -82,21 +84,25 @@ parse_term(Str) ->
 	{error, Str}
     end.
 
-
 ensure_list(Str) ->
     [ $[ | Str] ++ "]".
 
 
-%% receive comet updates
+%%%%%%%%%%%%%
+%%% Comet %%%
+
+%% @doc to receive comet updates.
 updates_listener_stream(Context) ->
     process_flag(trap_exit, true),
     listener_stream_subscribe(Context),
     updates_listener_stream_loop(Context).
 
+%% events receiver loop.
 updates_listener_stream_loop(Context) ->
     receive
 	{'$gen_cast', _} ->
 	    rerender_job_list(Context),
+	    %% ?MODULE is used for ability of code hot-replace
 	    ?MODULE:updates_listener_stream_loop(Context);
 
 	{'EXIT', _} ->
@@ -107,24 +113,25 @@ updates_listener_stream_loop(Context) ->
 
     end.
 
--define(UPDATES_LISTENER_EVENTS_LIST, [
-	cron_job_inserted, cron_job_deleted, cron_job_nextrun %, cron_job_executed
-    ]).
 
-%% comet: subscribe for z_notifier events
-listener_stream_subscribe(Context) ->
+%% comet: subscribe/unsubscribe from z_notifier events
+listener_stream_subscribe(Context)   -> listener_stream_notifier(observe, Context).
+listener_stream_unsubscribe(Context) -> listener_stream_notifier(detach, Context).
+
+listener_stream_notifier(FunAtom, Context) ->
     Self = self(),
-    lists:foreach(fun(Event) -> z_notifier:observe(Event, Self, Context) end, ?UPDATES_LISTENER_EVENTS_LIST).
-
-%% comet: unsubscribe from z_notifier
-listener_stream_unsubscribe(Context) ->
-    Self = self(),
-    lists:foreach(fun(Event) -> z_notifier:detach(Event, Self, Context) end, ?UPDATES_LISTENER_EVENTS_LIST).
+    lists:foreach(fun(Event) -> z_notifier:FunAtom(Event, Self, Context) end, coment_events_subscribe()).
 
 
+%% comet renderer. Updates job list on the user's display.
 rerender_job_list(Context) ->
     Target   = "div_job_list",
     Template = "_admin_cron_job_list.tpl",
     Context1 = z_render:wire({update, [{target, Target}, {template, Template}]}, Context),
     z_session_page:add_script(Context1).
+
+
+%% list of events, that comet stream need to listen.
+coment_events_subscribe() ->
+    [cron_job_inserted, cron_job_deleted, cron_job_nextrun]. %, cron_job_executed?
 

@@ -1,5 +1,0 @@
-- erlang R14B03+
-- zotonic
-
-If erlang < R14B03, stop_job will not work. Jobs will be removed from job list, but not stopped.
-See OTP-9201 at http://www.erlang.org/download/otp_src_R14B03.readme
