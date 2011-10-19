@@ -47,15 +47,13 @@ event({submit, insert_job, _TriggerId, _TargetId}, Context) ->
     Q = fun(Param) -> z_context:get_q(Param, Context) end,
     JobId = Q(id),
     %% parsing time definition into erlang term
-    {ok,When} = parse_term(Q("when")),
-    %% parse MFA
-    {ok,M} = parse_term(Q("module")),
-    {ok,F} = parse_term(Q("function")),
-    {ok,A} = parse_term(ensure_list(Q("args"))),
-    Task   = {When, {M,F,A}},
+    {ok, When} = cron_task:parse_when(Q("when")),
+    {ok, Mfa}  = cron_task:parse_mfa(Q("module"), Q("function"), Q("args")),
+    Task       = cron_task:new(When, Mfa),
     case z_notifier:first({cron_job_insert, JobId, Task}, Context) of
 	{ok,_}	-> RA = [{dialog_close, []}, {reload, []}],
 		   z_render:wire(RA, Context);
+
 	E	-> EText = io_lib:format("Error: ~p", [E]),
 		   z_render:growl_error(EText, Context)
     end;
@@ -64,28 +62,6 @@ event({submit, insert_job, _TriggerId, _TargetId}, Context) ->
 event({postback, {delete_job, [{job_id, JobId}]}, _TriggerId, _TargetId}, Context) ->
     z_notifier:notify({cron_job_delete, JobId}, Context),
     Context.
-
-
-%%% Parsing routines: we need to properly parse user's input of "when" and "args".
-%% erl_parse wants to see dot at the end. Add the dot:
-ensure_dot_end(Str) ->
-    case lists:last(Str) of
-	$. -> Str;
-	_  -> Str ++ "."
-    end.
-
-%% eralng terms parser. Wrapper around erl_scan and erl_parse.
-parse_term(Str) ->
-    Str1 = ensure_dot_end(Str),
-    try
-	{ok,Tokens,_} = erl_scan:string(Str1),
-	{ok,_Term} = erl_parse:parse_term(Tokens)
-    catch _:_ ->
-	{error, Str}
-    end.
-
-ensure_list(Str) ->
-    [ $[ | Str] ++ "]".
 
 
 %%%%%%%%%%%%%

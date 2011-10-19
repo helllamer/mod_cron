@@ -29,10 +29,10 @@
 -define(CRON_MAX_RESTART,		5).		    %% No more than 5 restarts ...
 -define(CRON_MAX_TIME,			60).		    %% ... per 60 seconds.
 
-%% One job in job list (cron_srv). 'task' is a task definition parseable by cron_task.erl.
+%% One job in job list (cron_srv).
 -record(job, {
 	id,				%% JobId - some identifier to manage the job
-	task,				%% Taks definition - is term, parseable by cron_task
+	task,				%% Taks definition - is term, parseable by cron_thread
 	pid,				%% Pid of task
 	created=erlang:localtime(),	%% When this task is added/started
 	counter=0,			%% How many times this task has been executed?

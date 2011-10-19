@@ -22,7 +22,7 @@ job()	     = #job{}
 jobs()	     = [job()]
 
 
-* Task = {When, MFA}. Look at following copypaste from support/cron_task.erl:
+* Task = {When, MFA}. Look at following copypaste from support/cron_thread.erl:
 
 task()       = {when(), mfa()}
 mfa()        = {module(), function(), args()}

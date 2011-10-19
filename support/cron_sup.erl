@@ -112,10 +112,10 @@ init(job_sup) ->
 childdef_job(JobId, Args) ->
     {
 	JobId,
-	{cron_task, start_link, Args},
+	{cron_thread, start_link, Args},
 	permanent,
 	brutal_kill,
 	worker,
-	[cron_task]
+	[cron_thread]
     }.
 
