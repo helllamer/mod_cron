@@ -22,10 +22,11 @@ job()	     = #job{}
 jobs()	     = [job()]
 
 
-* Task = {When, MFA}. Look at following copypaste from support/cron_thread.erl:
+* Task = cron_task:new(When, MFA).
+  Look at following copypaste from support/cron_thread.erl:
 
-task()       = {when(), mfa()}
 mfa()        = {module(), function(), args()}
+
 when()       = {daily, period()}
              | {weekly, dow(), period()} 
              | {monthly, dom(), period()}
@@ -40,6 +41,9 @@ time()       = {integer(), am | pm} | {integer(), integer(), am | pm}
 As you can see, it is possible to define almost any interval of time to run some MFA.
 Now, look at http://catseye.tc/projects/crone/src/crone_test.erl
 You can see list of example task object in start().
+
+Please use cron_task:new/2 constructor and mod_cron:* routines, instead of direct Task
+tuple construction. API may change in future.
 
 
 == mod_cron calls ===
