@@ -78,8 +78,6 @@ manage_schema(What, Context) ->
 %% @doc start this server
 start_link(Args) when is_list(Args) ->
     Context = proplists:get_value(context, Args),
-    %% ensure db schema
-    m_cron_job:install(Context),
     %% start this server
     Name   = cron_lib:name_mod(Context),
     Result = gen_server:start_link({local, Name}, ?MODULE, Args, []),
