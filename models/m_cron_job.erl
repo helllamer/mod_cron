@@ -20,7 +20,7 @@
 
 -behaviour(gen_model).
 -export([m_find_value/3, m_to_list/2, m_value/2]).
--export([get_task/2, get_all/1, insert/3, update/3, delete/2, install/1]).
+-export([get_task/2, get_all/1, insert/3, update/3, delete/2, manage_schema/2]).
 
 -include("../include/cron.hrl").
 -include("zotonic.hrl").
@@ -86,7 +86,7 @@ delete(JobId, Context) ->
 	E -> E
     end.
 
-%% serialize/deserialize task data
+%% @doc serialize/deserialize task data.
 task_to_binary(Task) when is_tuple(Task) ->
     term_to_binary(Task, [compressed]).
 
@@ -96,9 +96,9 @@ binary_to_task(X) ->
     X.
 
 
-%% create table if not exist
-install(Context) ->
-    z_db:ensure_table(?T_CRON_JOB, [
+%% @doc create table for persistent tasks, if not exist.
+manage_schema(install, Context) ->
+    z_db:create_table(?T_CRON_JOB, [
 	    #column_def{name=id,   type="varchar", is_nullable=false},
 	    #column_def{name=task, type="bytea",   is_nullable=false}
 	], Context),

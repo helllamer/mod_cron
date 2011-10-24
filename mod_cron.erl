@@ -22,13 +22,15 @@
 -mod_description("A task scheduler.").
 
 -behaviour(gen_server).
+-mod_schema(1).
 
 %% z_notifier pins
 -export([
 	observe_cron_job_insert/2,
 	observe_cron_job_inserted/2,
 	observe_cron_job_delete/2,
-	observe_cron_job_deleted/2
+	observe_cron_job_deleted/2,
+	manage_schema/2
     ]).
 
 %% gen_server
@@ -67,6 +69,10 @@ observe_cron_job_inserted({cron_job_inserted, JobId, Task}, Context) ->
 %% @doc message from m_cron_job about job deletion. Remove job from execution.
 observe_cron_job_deleted({cron_job_deleted, JobId}, Context) ->
     z_notifier:first({cron_job_stop, JobId}, Context).
+
+%% @doc create db schema.
+manage_schema(What, Context) ->
+    m_cron_job:manage_schema(What, Context).
 
 
 %% @doc start this server
