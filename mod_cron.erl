@@ -20,6 +20,7 @@
 -author("Konstantin Nikiforov <helllamer@gmail.com>").
 -mod_title("Cron").
 -mod_description("A task scheduler.").
+-mod_prio(100).
 
 -behaviour(gen_server).
 -mod_schema(1).
