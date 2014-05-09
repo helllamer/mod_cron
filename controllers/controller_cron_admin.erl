@@ -16,7 +16,7 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(resource_cron_admin).
+-module(controller_cron_admin).
 
 -export([
     %% wm resource:
@@ -28,7 +28,7 @@
     updates_listener_stream_loop/1
 ]).
 
--include_lib("resource_html.hrl").
+-include_lib("controller_html_helper.hrl").
 
 is_authorized(ReqData, Context) ->
     z_acl:wm_is_authorized(use, mod_cron, ReqData, Context).
