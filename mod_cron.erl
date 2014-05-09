@@ -25,6 +25,9 @@
 -behaviour(gen_server).
 -mod_schema(1).
 
+%% admin menu
+-export([observe_admin_menu/3]).
+
 %% z_notifier pins
 -export([
 	observe_cron_job_insert/2,
@@ -49,10 +52,20 @@
 
 -include("include/cron.hrl").
 -include("include/zotonic.hrl").
+-include_lib("modules/mod_admin/include/admin_menu.hrl").
 
 %% Server will subscribe on this events on init() and unsubscribe on terminate().
 -define(MOD_SRV_SUBSCRIBE, [cron_job_start, cron_job_stop]).
 
+%% Add cron admin page to the admin menu tree
+observe_admin_menu(admin_menu, Acc, Context) ->
+    [
+     #menu_item{id=admin_mod_cron,
+                parent=admin_modules,
+                label=?__("Cron Tasks", Context),
+                url={admin_mod_cron},
+                visiblecheck={acl, use, ?MODULE}}
+     |Acc].
 
 %% @doc External management: add job to db and start.
 observe_cron_job_insert({cron_job_insert, JobId, Task}, Context) ->
